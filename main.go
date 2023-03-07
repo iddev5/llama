@@ -94,11 +94,12 @@ func main() {
 	lipgloss.SetColorProfile(output.ColorProfile())
 
 	m := &model{
-		path:      startPath,
-		width:     80,
-		height:    60,
-		positions: make(map[string]position),
-		showIcons: showIcons,
+		path:        startPath,
+		width:       80,
+		height:      60,
+		positions:   make(map[string]position),
+		showIcons:   showIcons,
+		previewMode: true,
 	}
 	m.list()
 
@@ -127,6 +128,7 @@ type model struct {
 	previewMode       bool                // Whether preview is active.
 	previewContent    string              // Content of preview.
 	deleteCurrentFile bool                // Whether to delete current file.
+	toQuit            bool                // Whether to quit
 	toBeDeleted       []toDelete          // Map of files to be deleted.
 	showIcons         bool                // Whether to show icons or not
 }
@@ -211,11 +213,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case key.Matches(msg, keyQuit):
-			_, _ = fmt.Fprintln(os.Stderr) // Keep last item visible after prompt.
-			fmt.Println(m.path)            // Write to cd.
-			m.exitCode = 0
-			m.performPendingDeletions()
-			return m, tea.Quit
+			if m.toQuit {
+				m.toQuit = false
+				_, _ = fmt.Fprintln(os.Stderr) // Keep last item visible after prompt.
+				fmt.Println(m.path)            // Write to cd.
+				m.exitCode = 0
+				m.performPendingDeletions()
+				return m, tea.Quit
+			} else {
+				m.toQuit = true
+			}
+			return m, nil
 
 		case key.Matches(msg, keyOpen):
 			m.searchMode = false
@@ -362,6 +370,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} // End of switch statement for key presses.
 
 		m.deleteCurrentFile = false
+		m.toQuit = false
 		m.updateOffset()
 		m.saveCursorPosition()
 		m.preview()
@@ -533,12 +542,18 @@ start:
 	if barLen > outputWidth {
 		location = location[min(barLen-outputWidth, len(location)):]
 	}
-	bar := bar.Render(location) + search.Render(filter)
+	baz := ""
+	if m.toQuit == true {
+		baz = danger.Render(location)
+	} else {
+		baz = bar.Render(location)
+	}
+	baz += search.Render(filter)
 
-	main := bar + "\n" + Join(output, "\n")
+	main := baz + "\n" + Join(output, "\n")
 
 	if len(m.files) == 0 {
-		main = bar + "\n" + warning.Render("No files")
+		main = baz + "\n" + warning.Render("No files")
 	}
 
 	// Delete bar.
